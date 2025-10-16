@@ -5,23 +5,24 @@ import Register from './components/Register';
 import Home from './components/Home';
 import './App.css';
 
+// Use environment variable for the API URL, with a fallback for local development
+const API_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5000';
+
 function App() {
     const [token, setToken] = useState(localStorage.getItem('token'));
     const [view, setView] = useState('login');
     const [trips, setTrips] = useState([]);
-    const [isLoadingTrips, setIsLoadingTrips] = useState(true); // New loading state
+    const [isLoadingTrips, setIsLoadingTrips] = useState(true);
 
-    // Central function to fetch trip data
     const fetchTrips = async () => {
         const storedToken = localStorage.getItem('token');
         if (!storedToken) return;
 
-        setIsLoadingTrips(true); // Start loading
+        setIsLoadingTrips(true);
         try {
-            const res = await axios.get('http://127.0.0.1:5000/api/trips', {
+            const res = await axios.get(`${API_URL}/api/trips`, {
                 headers: { 'x-access-token': storedToken }
             });
-            // *** FIX: Access the 'trips' array inside the response data ***
             if (res.data && Array.isArray(res.data.trips)) {
                 setTrips(res.data.trips.reverse());
             }
@@ -31,11 +32,10 @@ function App() {
                 handleLogout();
             }
         } finally {
-            setIsLoadingTrips(false); // Stop loading
+            setIsLoadingTrips(false);
         }
     };
 
-    // This effect runs only when the token changes
     useEffect(() => {
         if (token) {
             fetchTrips();
@@ -55,7 +55,6 @@ function App() {
     };
 
     if (token) {
-        // Pass the trips, loading state, and refresh function to Home
         return <Home trips={trips} isLoadingTrips={isLoadingTrips} onLogout={handleLogout} refreshTrips={fetchTrips} />;
     }
 
