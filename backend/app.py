@@ -6,7 +6,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 from datetime import datetime, timedelta
 from functools import wraps
-import click # Import click for CLI commands
+import click 
+from dotenv import load_dotenv # Import the dotenv package
+
+load_dotenv() # Load environment variables from .env file
 
 # --- App Initialization ---
 app = Flask(__name__)
@@ -15,7 +18,14 @@ CORS(app)
 # --- Configuration ---
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_default_secret_key_here')
 basedir = os.path.abspath(os.path.dirname(__file__))
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'instance', 'driveguard.db')
+
+# --- Dynamic Database Configuration ---
+# This will now automatically read from your .env file
+database_url = os.environ.get('DATABASE_URL')
+if database_url:
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url or 'sqlite:///' + os.path.join(basedir, 'instance', 'driveguard.db')
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # --- Database Setup ---
@@ -41,7 +51,7 @@ class Trip(db.Model):
     alert_count = db.Column(db.Integer, default=0)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
-# --- NEW: Database Initialization Command ---
+# --- Database Initialization Command ---
 @app.cli.command("init-db")
 def init_db_command():
     """Clear the existing data and create new tables."""
