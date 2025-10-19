@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 const Register = ({ onRegisterSuccess, onSwitchToLogin }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -9,7 +9,7 @@ const Register = ({ onRegisterSuccess, onSwitchToLogin }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            await axios.post('http://127.0.0.1:5000/api/register', { email, password });
+            await axios.post(`${API_BASE_URL}/api/register`, { email, password });
             onRegisterSuccess();
         } catch (err) {
             setError('Could not register. Email may already be in use.');
