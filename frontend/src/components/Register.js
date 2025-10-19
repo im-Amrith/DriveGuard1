@@ -10,6 +10,7 @@ const Register = ({ onRegisterSuccess, onSwitchToLogin }) => {
         e.preventDefault();
         try {
             await axios.post(`${API_BASE_URL}/api/register`, { email, password });
+
             onRegisterSuccess();
         } catch (err) {
             setError('Could not register. Email may already be in use.');

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 const Login = ({ onLoginSuccess, onSwitchToRegister }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -9,7 +9,7 @@ const Login = ({ onLoginSuccess, onSwitchToRegister }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            const res = await axios.post('http://127.0.0.1:5000/api/login', { email, password });
+            const res = await axios.post(`${API_BASE_URL}/api/login`, { email, password });
             localStorage.setItem('token', res.data.token);
             onLoginSuccess();
         } catch (err) {
