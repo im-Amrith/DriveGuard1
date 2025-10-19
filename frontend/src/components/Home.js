@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import TripMonitor from './TripMonitor';
 import axios from 'axios'; // Import axios
-
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 // --- SVG Icons ---
 const RoadIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 13.5V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v4.5"/><path d="M12 10h4a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-4.5"/><path d="M8 8v2a2 2 0 0 0 2 2h2"/><line x1="12" y1="22" x2="12" y2="10"/></svg>;
 const ClockIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
@@ -53,7 +53,7 @@ const Home = ({ trips, isLoadingTrips, onLogout, refreshTrips }) => {
         if (window.confirm('Are you sure you want to delete this trip history?')) {
             try {
                 const token = localStorage.getItem('token');
-                await axios.delete(`http://127.0.0.1:5000/api/trips/${tripId}`, {
+                await axios.delete(`${API_BASE_URL}/api/trips/${tripId}`, {
                     headers: { 'x-access-token': token }
                 });
                 refreshTrips(); // Refresh the list after successful deletion

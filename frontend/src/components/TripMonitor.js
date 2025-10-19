@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import { FaceMesh } from '@mediapipe/face_mesh';
 import { GoogleMap, useJsApiLoader, Autocomplete, DirectionsRenderer, Marker } from '@react-google-maps/api';
-
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 // --- Configuration ---
 const EAR_THRESHOLD = 0.2;
 const EAR_CONSEC_FRAMES = 15;
@@ -218,7 +218,7 @@ const TripMonitor = ({ onTripEnd }) => {
         };
         try {
             const token = localStorage.getItem('token');
-            await axios.post('http://127.0.0.1:5000/api/trips', tripData, { headers: { 'x-access-token': token } });
+            await axios.post(`${API_BASE_URL}/api/trips`, tripData, { headers: { 'x-access-token': token } });
         } catch (error) { console.error("Failed to save trip", error); }
         onTripEnd();
     };
