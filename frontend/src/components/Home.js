@@ -1,5 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import TripMonitor from './TripMonitor';
+import Analytics from './Analytics';
+import Rewards from './Rewards';
+import EmergencyContacts from './EmergencyContacts';
+import AdminDashboard from './AdminDashboard';
 import axios from 'axios'; // Import axios
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 // --- SVG Icons ---
@@ -9,6 +13,9 @@ const AlertTriangleIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" 
 const MoonIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>;
 const LogoutIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>;
 const TrashIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
+const ChartIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>;
+const AwardIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>;
+const AlertIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
 
 
 // Home now receives isLoadingTrips prop
@@ -37,11 +44,16 @@ const Home = ({ trips, isLoadingTrips, onLogout, refreshTrips }) => {
     }, [trips]);
 
     const safetyScore = useMemo(() => {
-        if (lifetimeStats.totalHours === 0 && lifetimeStats.totalMinutes < 10) return 100;
-        const totalDurationInHours = lifetimeStats.totalHours + lifetimeStats.totalMinutes / 60;
-        const penaltyPoints = (lifetimeStats.totalAlerts * 5 + lifetimeStats.totalYawns * 2) / (totalDurationInHours || 1);
-        return Math.max(0, Math.round(100 - penaltyPoints));
-    }, [lifetimeStats]);
+        if (trips.length === 0) return 100;
+        
+        // Calculate average of individual trip scores (matching backend logic)
+        const tripScores = trips.map(trip => {
+            const penalty = (trip.alert_count * 3) + (trip.yawn_count * 1);
+            return Math.max(0, Math.min(100, Math.round(100 - penalty)));
+        });
+        
+        return Math.round(tripScores.reduce((sum, score) => sum + score, 0) / tripScores.length);
+    }, [trips]);
 
     const handleTripEnd = () => {
         setView('dashboard');
@@ -68,6 +80,22 @@ const Home = ({ trips, isLoadingTrips, onLogout, refreshTrips }) => {
         return <TripMonitor onTripEnd={handleTripEnd} />;
     }
 
+    if (view === 'analytics') {
+        return <Analytics onBack={() => setView('dashboard')} />;
+    }
+
+    if (view === 'rewards') {
+        return <Rewards onBack={() => setView('dashboard')} />;
+    }
+
+    if (view === 'admin') {
+        return <AdminDashboard onBack={() => setView('dashboard')} />;
+    }
+
+    if (view === 'contacts') {
+        return <EmergencyContacts onBack={() => setView('dashboard')} />;
+    }
+
     return (
         <div style={styles.page}>
             <div style={styles.container}>
@@ -83,7 +111,26 @@ const Home = ({ trips, isLoadingTrips, onLogout, refreshTrips }) => {
                     <div style={styles.ctaCard}>
                         <h2>Ready for the road?</h2>
                         <p>Start a new trip to begin monitoring your alertness in real-time.</p>
-                        <button onClick={() => setView('trip')} style={styles.startButton}>Start New Trip</button>
+                        <div style={styles.buttonGroup}>
+                            <button onClick={() => setView('trip')} style={styles.startButton}>Start New Trip</button>
+                            <button onClick={() => setView('analytics')} style={styles.analyticsButton}>
+                                <ChartIcon />
+                                <span style={{ marginLeft: '8px' }}>View Analytics</span>
+                            </button>
+                            <button onClick={() => setView('rewards')} style={styles.rewardsButton}>
+                                <AwardIcon />
+                                <span style={{ marginLeft: '8px' }}>Rewards</span>
+                            </button>
+                            <button onClick={() => setView('contacts')} style={styles.contactsButton}>
+                                <AlertIcon />
+                                <span style={{ marginLeft: '8px' }}>Emergency Contacts</span>
+                            </button>
+                            {localStorage.getItem('is_admin') === 'true' && (
+                                <button onClick={() => setView('admin')} style={styles.adminButton}>
+                                    👑 <span style={{ marginLeft: '8px' }}>Admin Dashboard</span>
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     <div style={styles.tripsSection}>
@@ -226,6 +273,55 @@ const styles = {
         cursor: 'pointer',
         transition: 'transform 0.2s, box-shadow 0.2s',
     },
+    buttonGroup: {
+        display: 'flex',
+        gap: '15px',
+        justifyContent: 'center',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+    },
+    analyticsButton: {
+        background: 'rgba(102, 126, 234, 0.8)',
+        color: 'white',
+        border: 'none',
+        padding: '15px 30px',
+        borderRadius: '30px',
+        fontSize: '1.1rem',
+        fontWeight: 'bold',
+        cursor: 'pointer',
+        transition: 'transform 0.2s, box-shadow 0.2s',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    rewardsButton: {
+        background: 'rgba(251, 191, 36, 0.8)',
+        color: 'white',
+        border: 'none',
+        padding: '15px 30px',
+        borderRadius: '30px',
+        fontSize: '1.1rem',
+        fontWeight: 'bold',
+        cursor: 'pointer',
+        transition: 'transform 0.2s, box-shadow 0.2s',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    contactsButton: {
+        background: 'rgba(231, 76, 60, 0.8)',
+        color: 'white',
+        border: 'none',
+        padding: '15px 30px',
+        borderRadius: '30px',
+        fontSize: '1.1rem',
+        fontWeight: 'bold',
+        cursor: 'pointer',
+        transition: 'transform 0.2s, box-shadow 0.2s',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     tripsSection: {
         background: 'rgba(0, 0, 0, 0.2)',
         padding: '30px',
@@ -305,7 +401,23 @@ const styles = {
         borderRadius: '15px',
         textAlign: 'center',
     },
+    adminButton: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '14px 28px',
+        border: 'none',
+        borderRadius: '10px',
+        cursor: 'pointer',
+        fontSize: '16px',
+        fontWeight: '600',
+        background: 'linear-gradient(135deg, #f39c12, #e67e22)',
+        color: 'white',
+        boxShadow: '0 4px 12px rgba(243, 156, 18, 0.3)',
+        transition: 'all 0.2s',
+    },
 };
 
 export default Home;
+
 

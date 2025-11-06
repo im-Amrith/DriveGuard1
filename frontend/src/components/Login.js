@@ -11,6 +11,8 @@ const Login = ({ onLoginSuccess, onSwitchToRegister }) => {
         try {
             const res = await axios.post(`${API_BASE_URL}/api/login`, { email, password });
             localStorage.setItem('token', res.data.token);
+            localStorage.setItem('is_admin', res.data.is_admin || 'false');
+            localStorage.setItem('user_email', res.data.email || email);
             onLoginSuccess();
         } catch (err) {
             setError('Invalid credentials. Please try again.');

@@ -34,6 +34,11 @@ const TripMonitor = ({ onTripEnd }) => {
     const [directionsResponse, setDirectionsResponse] = useState(null);
     const [currentPosition, setCurrentPosition] = useState(null);
     const [currentHeading, setCurrentHeading] = useState(0);
+    
+    // Emergency Contact Alert System - using ref for immediate access
+    const currentTripIdRef = useRef(null);
+    const [alertTimestamps, setAlertTimestamps] = useState([]);
+    const [notificationSent, setNotificationSent] = useState(false);
 
     const earCounter = useRef(0);
     const yawnCounter = useRef(0);
@@ -89,6 +94,50 @@ const TripMonitor = ({ onTripEnd }) => {
             }
         }
     };
+    
+    // Emergency Contact Alert System Functions
+    const sendAlertToBackend = async (alertType) => {
+        if (!currentTripIdRef.current) {
+            console.warn('⚠️ No trip ID yet, cannot send alert to backend');
+            return;
+        }
+        
+        console.log(`🔔 Sending alert to backend: trip_id=${currentTripIdRef.current}, type=${alertType}`);
+        
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.post(
+                `${API_BASE_URL}/api/alert`,
+                {
+                    trip_id: currentTripIdRef.current,
+                    alert_type: alertType,
+                    timestamp: new Date().toISOString()
+                },
+                { headers: { 'x-access-token': token } }
+            );
+            
+            console.log('✅ Alert sent successfully:', response.data);
+            
+            if (response.data.emergency_notification_sent && !notificationSent) {
+                console.log('🚨 EMERGENCY NOTIFICATION WAS SENT!');
+                setNotificationSent(true);
+            }
+        } catch (error) {
+            console.error('❌ Error sending alert to backend:', error);
+        }
+    };
+    
+    const trackLocalAlert = (alertType) => {
+        const now = Date.now();
+        setAlertTimestamps(prev => {
+            const twoMinutesAgo = now - (2 * 60 * 1000);
+            const recentAlerts = prev.filter(timestamp => timestamp > twoMinutesAgo);
+            return [...recentAlerts, now];
+        });
+        
+        // Send to backend
+        sendAlertToBackend(alertType);
+    };
     const onResults = useCallback((results) => {
         if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
             const keypoints = results.multiFaceLandmarks[0];
@@ -101,7 +150,11 @@ const TripMonitor = ({ onTripEnd }) => {
             if (ear < EAR_THRESHOLD) {
                 earCounter.current++;
                 if (earCounter.current >= EAR_CONSEC_FRAMES) {
-                    if (!isAlarming.current) setAlertCount(prev => prev + 1);
+                    if (!isAlarming.current) {
+                        setAlertCount(prev => prev + 1);
+                        console.log('😴 Drowsiness detected! Tracking alert...');
+                        trackLocalAlert('drowsy'); // Send to backend
+                    }
                     triggerAlarm(true);
                 }
             } else {
@@ -112,6 +165,8 @@ const TripMonitor = ({ onTripEnd }) => {
                 yawnCounter.current++;
                 if (yawnCounter.current >= YAWN_CONSEC_FRAMES && !isYawning.current) {
                     setYawnCount(prev => prev + 1);
+                    console.log('🥱 Yawn detected! Tracking alert...');
+                    trackLocalAlert('yawn'); // Send to backend
                     isYawning.current = true;
                 }
             } else {
@@ -126,10 +181,22 @@ const TripMonitor = ({ onTripEnd }) => {
         const loadResources = async () => {
             try {
                 setStatusText("Loading AI Model...");
-                const faceMesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
-                faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+                
+                // Import FaceMesh with proper CDN configuration
+                const faceMesh = new FaceMesh({ 
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` 
+                });
+                
+                faceMesh.setOptions({ 
+                    maxNumFaces: 1, 
+                    refineLandmarks: true, // Disable to speed up loading
+                    minDetectionConfidence: 0.5, 
+                    minTrackingConfidence: 0.5 
+                });
+                
                 faceMesh.onResults(onResults);
                 faceMeshRef.current = faceMesh;
+                
                 setStatusText("Accessing camera...");
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 } } });
                 if (videoRef.current) {
@@ -162,9 +229,43 @@ const TripMonitor = ({ onTripEnd }) => {
     }, [isTripStarted]);
 
     // --- Trip Management & Routing ---
-    const handleStartNavigation = () => {
+    const handleStartNavigation = async () => {
         setIsTripStarted(true);
         setStartTime(Date.now());
+        
+        // Reset emergency alert tracking
+        currentTripIdRef.current = null; // Clear any previous trip ID
+        setAlertTimestamps([]);
+        setNotificationSent(false);
+        
+        // Create trip record immediately to get trip_id
+        try {
+            const token = localStorage.getItem('token');
+            const tripData = { 
+                start_location: startLocationRef.current.value, 
+                end_location: endLocationRef.current.value, 
+                duration_seconds: 0, // Will be updated at trip end
+                yawn_count: 0, 
+                alert_count: 0 
+            };
+            
+            console.log('🚗 Creating trip...', tripData);
+            
+            const response = await axios.post(`${API_BASE_URL}/api/trips`, tripData, { 
+                headers: { 'x-access-token': token } 
+            });
+            
+            console.log('✅ Trip created:', response.data);
+            
+            if (response.data.trip_id) {
+                currentTripIdRef.current = response.data.trip_id;
+                console.log(`📝 Trip ID stored in ref: ${currentTripIdRef.current}`);
+            } else {
+                console.error('❌ No trip_id in response!');
+            }
+        } catch (error) { 
+            console.error("❌ Failed to create trip", error); 
+        }
     
         // This function handles the device's compass heading (for mobile)
         const handleDeviceOrientation = (event) => {
@@ -209,17 +310,29 @@ const TripMonitor = ({ onTripEnd }) => {
         window.removeEventListener('deviceorientation', () => {});
         
         const duration_seconds = Math.round((Date.now() - startTime) / 1000);
-        const tripData = { 
-            start_location: startLocationRef.current.value, 
-            end_location: endLocationRef.current.value, 
-            duration_seconds, 
-            yawn_count: yawnCount, 
-            alert_count: alertCount 
-        };
-        try {
-            const token = localStorage.getItem('token');
-            await axios.post(`${API_BASE_URL}/api/trips`, tripData, { headers: { 'x-access-token': token } });
-        } catch (error) { console.error("Failed to save trip", error); }
+        
+        // Update the existing trip with final data
+        // Note: alert_count is already updated in real-time by /api/alert endpoint
+        if (currentTripIdRef.current) {
+            try {
+                const token = localStorage.getItem('token');
+                const updateData = { 
+                    duration_seconds, 
+                    yawn_count: yawnCount
+                    // alert_count is NOT sent - it's already tracked in real-time
+                };
+                await axios.put(`${API_BASE_URL}/api/trips/${currentTripIdRef.current}`, updateData, { 
+                    headers: { 'x-access-token': token } 
+                });
+            } catch (error) { 
+                console.error("Failed to update trip", error); 
+            }
+        }
+        
+        // Clear the trip ID ref
+        currentTripIdRef.current = null;
+        console.log('🧹 Trip ID ref cleared');
+        
         onTripEnd();
     };
 
@@ -331,7 +444,97 @@ const TripMonitor = ({ onTripEnd }) => {
                     <video ref={videoRef} autoPlay playsInline muted style={styles.video} />
                 </div>
             </div>
+            
+            {/* Alert Counter Overlay */}
+            {isTripStarted && (() => {
+                const now = Date.now();
+                const twoMinutesAgo = now - (2 * 60 * 1000);
+                const recentAlertCount = alertTimestamps.filter(t => t > twoMinutesAgo).length;
+                
+                return (
+                    <div style={{
+                        position: 'fixed',
+                        top: '20px',
+                        left: '20px',
+                        background: recentAlertCount >= 5 ? 'rgba(231, 76, 60, 0.95)' : 'rgba(52, 73, 94, 0.9)',
+                        padding: '15px 25px',
+                        borderRadius: '30px',
+                        color: 'white',
+                        fontWeight: 'bold',
+                        fontSize: '18px',
+                        boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
+                        animation: recentAlertCount >= 5 ? 'pulse 1.5s infinite' : 'none',
+                        zIndex: 1000
+                    }}>
+                        {recentAlertCount >= 5 && '⚠️ '} 
+                        Recent Alerts: {recentAlertCount}/5
+                    </div>
+                );
+            })()}
+            
+            {/* Emergency Notification Banner */}
+            {notificationSent && (
+                <div style={{
+                    position: 'fixed',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    background: 'rgba(231, 76, 60, 0.98)',
+                    padding: '40px',
+                    borderRadius: '20px',
+                    color: 'white',
+                    textAlign: 'center',
+                    zIndex: 9999,
+                    maxWidth: '500px',
+                    boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+                    border: '3px solid white'
+                }}>
+                    <h2 style={{ margin: '0 0 20px 0', fontSize: '28px', fontWeight: 'bold' }}>
+                        🚨 EMERGENCY ALERT
+                    </h2>
+                    <p style={{ fontSize: '18px', lineHeight: '1.6', marginBottom: '20px' }}>
+                        Your emergency contacts have been notified due to excessive drowsiness detection.
+                        <br /><br />
+                        <strong>Please pull over to a safe location immediately and take a break.</strong>
+                    </p>
+                    <button 
+                        onClick={() => setNotificationSent(false)}
+                        style={{
+                            padding: '12px 30px',
+                            background: 'white',
+                            color: '#e74c3c',
+                            border: 'none',
+                            borderRadius: '30px',
+                            fontWeight: 'bold',
+                            cursor: 'pointer',
+                            fontSize: '16px',
+                            transition: 'transform 0.2s'
+                        }}
+                        onMouseOver={(e) => e.target.style.transform = 'scale(1.05)'}
+                        onMouseOut={(e) => e.target.style.transform = 'scale(1)'}
+                    >
+                        I Understand
+                    </button>
+                </div>
+            )}
+            
             <audio ref={alarmAudioRef} src="/alarm.mp3" />
+            
+            {/* CSS Animation for Pulse Effect */}
+            <style>
+                {`
+                    @keyframes pulse {
+                        0%, 100% {
+                            transform: scale(1);
+                            opacity: 1;
+                        }
+                        50% {
+                            transform: scale(1.05);
+                            opacity: 0.85;
+                        }
+                    }
+                `}
+            </style>
         </div>
     );
 };
